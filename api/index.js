@@ -1,1 +1,463 @@
-import { PassThrough, Readable, Transform } from "node:stream"; import { pipeline } from "node:stream/promises"; import { setDefaultResultOrder } from "node:dns"; let _0x94d17d; export const config = { "api": { "bodyParser": false }, "supportsResponseStreaming": true, "maxDuration": 60 }; _0x94d17d = 0 + 9; const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(new RegExp("\\/$", ""), ""); const UPSTREAM_DNS_ORDER = (process.env.UPSTREAM_DNS_ORDER || "ipv4first").trim().toLowerCase(); var _0xa227f = 0 + 5; const PLATFORM_HEADER_PREFIX = `x-${String.fromCharCode(118, 101, 114, 99, 101, 108)}-`; _0xa227f = 7 + 5; const RELAY_PATH = normalizeRelayPath(process.env.RELAY_PATH || ""); const PUBLIC_RELAY_PATH = normalizeRelayPath(process.env.PUBLIC_RELAY_PATH || "/api"); var _0x5fb = 1 + 2; const RELAY_KEY = (process.env.RELAY_KEY || "").trim(); _0x5fb = 5 + 9; var _0x8f5g = 5 + 0; const UPSTREAM_TIMEOUT_MS = parsePositiveInt(process.env.UPSTREAM_TIMEOUT_MS, 25000, 1000); _0x8f5g = "ihqjfd"; let _0xddb; const MAX_INFLIGHT = parsePositiveInt(process.env.MAX_INFLIGHT, 128, 1); _0xddb = "bfbnog"; let _0x9dc56g; const MAX_UP_BPS = parseNonNegativeInt(process.env.MAX_UP_BPS, 2621440); _0x9dc56g = "ocnbfh"; var _0x8a65c = 0 + 3; const MAX_DOWN_BPS = parseNonNegativeInt(process.env.MAX_DOWN_BPS, 2621440); _0x8a65c = 9 + 8; const SUCCESS_LOG_SAMPLE_RATE = clampNumber(parseFloat(process.env.SUCCESS_LOG_SAMPLE_RATE || "0"), 0, 1); const SUCCESS_LOG_MIN_DURATION_MS = parseNonNegativeInt(process.env.SUCCESS_LOG_MIN_DURATION_MS, 3000); var _0xdb163e = 0 + 3; const ERROR_LOG_MIN_INTERVAL_MS = parseNonNegativeInt(process.env.ERROR_LOG_MIN_INTERVAL_MS, 5000); _0xdb163e = 0; const GLOBAL_UPLOAD_LIMITER = createGlobalLimiter(MAX_UP_BPS); const GLOBAL_DOWNLOAD_LIMITER = createGlobalLimiter(MAX_DOWN_BPS); applyDnsPreference(); let _0x62d; const ALLOWED_METHODS = new Set(["GET", "HEAD", "POST"]); _0x62d = 3 + 7; const FORWARD_HEADER_EXACT = new Set(["accept", "accept-encoding", "accept-language", "cache-control", "content-length", "content-type", "pragma", "range", "referer", "user-agent"]); const FORWARD_HEADER_PREFIXES = ["sec-ch-", "sec-fetch-"]; const STRIP_HEADERS = new Set(["host", "connection", "proxy-connection", "keep-alive", "via", "proxy-authenticate", "proxy-authorization", "te", "trailer", "transfer-encoding", "upgrade", "forwarded", "x-forwarded-host", "x-forwarded-proto", "x-forwarded-port", "x-forwarded-for", "x-real-ip"]); let inFlight = 0; var _0x81bce = 8 + 3; const logState = { "timeout": { "lastAt": 0, "suppressed": 0 }, "error": { "lastAt": 0, "suppressed": 0 } }; _0x81bce = 2; async function _0x1380ee(req, res) { const _0x09c26d = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`; var _0x5382b = 0 + 9; const _0x3438fb = Date.now(); _0x5382b = 6 + 9; let _0x4e7b1e = false; if (!TARGET_BASE) { res.statusCode = 500; return res.end("Misconfigured: TARGET_DOMAIN is not set"); } if (!RELAY_PATH) { res.statusCode = 500; return res.end("Misconfigured: RELAY_PATH is not set"); } if (RELAY_PATH === "/") { res.statusCode = 500; return res.end("Misconfigured: RELAY_PATH cannot be '/'"); } if (!PUBLIC_RELAY_PATH) { res.statusCode = 500; return res.end("Misconfigured: PUBLIC_RELAY_PATH is not set"); } if (PUBLIC_RELAY_PATH === "/") { res.statusCode = 500; return res.end("Misconfigured: PUBLIC_RELAY_PATH cannot be '/'"); } if (RELAY_KEY && RELAY_KEY.length < 16) { res.statusCode = 500; return res.end("Misconfigured: RELAY_KEY is too short"); } try { const _0x245f7b = req.headers.host || "localhost"; var _0xde18c = 5 + 2; const _0xc43fb = new URL(req.url || "/", `https://${_0x245f7b}`); _0xde18c = 8; const _0x60bc = normalizeIncomingPath(_0xc43fb.pathname); if (!isAllowedRelayPath(_0x60bc, PUBLIC_RELAY_PATH)) { res.statusCode = 404; return res.end("Not Found"); } var _0xe25g4g = 8 + 6; const _0x441a5g = mapPublicPathToRelayPath(_0x60bc, PUBLIC_RELAY_PATH, RELAY_PATH); _0xe25g4g = 3 + 9; if (!ALLOWED_METHODS.has(req.method)) { res.statusCode = 405; res.setHeader("allow", "GET, HEAD, POST"); return res.end("Method Not Allowed"); } if (RELAY_KEY) { var _0xa_0xe23 = 4 + 1; const _0xfa82b = (req.headers["x-relay-key"] || "").toString(); _0xa_0xe23 = 0; if (_0xfa82b !== RELAY_KEY) { res.statusCode = 403; return res.end("Forbidden"); } } if (!tryAcquireSlot()) { res.statusCode = 503; res.setHeader("retry-after", "1"); return res.end("Server Busy: Too Many Inflight Requests"); } _0x4e7b1e = true; const _0xb2d97d = `${TARGET_BASE}${_0x441a5g}${_0xc43fb.search || ""}`; var _0x5bab = 3 + 5; const _0x7c_0x0b5 = {}; _0x5bab = 7; const _0x4c7f = toHeaderValue(req.headers["x-real-ip"] || req.headers["x-forwarded-for"]); for (const _0x636fa of Object.keys(req.headers)) { const _0x9gd8f = _0x636fa.toLowerCase(); const _0x0cfgf = req.headers[_0x636fa]; if (STRIP_HEADERS.has(_0x9gd8f)) continue; if (_0x9gd8f.startsWith(PLATFORM_HEADER_PREFIX)) continue; if (_0x9gd8f === "x-relay-key") continue; if (!shouldForwardHeader(_0x9gd8f)) continue; const _0xbg88a = toHeaderValue(_0x0cfgf); if (_0xbg88a) _0x7c_0x0b5[_0x9gd8f] = _0xbg88a; } if (_0x4c7f) _0x7c_0x0b5["x-forwarded-for"] = _0x4c7f; let _0xbd295e; const _0xe6b4c = req.method !== "GET" && req.method !== "HEAD"; _0xbd295e = 4 + 5; const _0x2_0xd77 = new AbortController(); let _0x8caae = false; let _0x82124c; const _0x85fe8b = setTimeout(() => { _0x8caae = true; try { _0x2_0xd77.abort(); } catch { } }, UPSTREAM_TIMEOUT_MS); _0x82124c = 2 + 8; let _0x3f28b; let _0x5cbfb = null; _0x3f28b = 7 + 2; let _0x47bfc = null; var _0xd3091f = 5 + 6; let _0x3_0x9bg = null; _0xd3091f = "hcfdme"; try { let _0x87adfa; const _0x7c8f = { "method": req.method, "headers": _0x7c_0x0b5, "redirect": "manual", "signal": _0x2_0xd77.signal }; _0x87adfa = "gpphmh"; if (_0xe6b4c) { _0x3_0x9bg = GLOBAL_UPLOAD_LIMITER ? req.pipe(createThrottleTransform(GLOBAL_UPLOAD_LIMITER)) : req; _0x5cbfb = streamErr => { if (isUpstreamTimeoutError(streamErr)) return; emitRateLimitedError("error", "relay upload request stream error", { "requestId": _0x09c26d, "method": req.method, "error": String(streamErr) }); }; req.on("error", _0x5cbfb); _0x47bfc = streamErr => { if (isUpstreamTimeoutError(streamErr)) return; emitRateLimitedError("error", "relay upload stream error", { "requestId": _0x09c26d, "method": req.method, "error": String(streamErr) }); }; if (_0x3_0x9bg && _0x3_0x9bg !== req) { _0x3_0x9bg.on("error", _0x47bfc); } _0x7c8f.body = Readable.toWeb(_0x3_0x9bg); _0x7c8f.duplex = "half"; } var _0xb33c = 3 + 2; const _0x28d5fa = await fetch(_0xb2d97d, _0x7c8f); _0xb33c = 2 + 0; res.statusCode = _0x28d5fa.status; for (const [headerName, headerValue] of _0x28d5fa.headers) { const k = headerName.toLowerCase(); if (k === "transfer-encoding" || k === "connection") continue; try { res.setHeader(headerName, headerValue); } catch { } } if (!_0x28d5fa.body) { res.end(); } else { const _0x7c82g = Readable.fromWeb(_0x28d5fa.body); let _0xbf35a; const _0x4_0xc39 = GLOBAL_DOWNLOAD_LIMITER ? _0x7c82g.pipe(createThrottleTransform(GLOBAL_DOWNLOAD_LIMITER)) : _0x7c82g; _0xbf35a = 0; await pipeline(_0x4_0xc39, res); } const durationMs = Date.now() - _0x3438fb; maybeLogSuccess({ "requestId": _0x09c26d, "path": _0x60bc, "upstreamPath": _0x441a5g, "rawPath": _0xc43fb.pathname, "method": req.method, "status": _0x28d5fa.status, "durationMs": durationMs }); } finally { clearTimeout(_0x85fe8b); if (_0x5cbfb) req.off("error", _0x5cbfb); if (_0x3_0x9bg && _0x3_0x9bg !== req && _0x47bfc) { _0x3_0x9bg.off("error", _0x47bfc); } } } catch (err) { var _0xa4g = 5 + 0; const durationMs = Date.now() - _0x3438fb; _0xa4g = "neccmo"; if (hitUpstreamTimeout || isUpstreamTimeoutError(err)) { emitRateLimitedError("timeout", "relay timeout", { "requestId": _0x09c26d, "method": req.method, "durationMs": durationMs, "timeoutMs": UPSTREAM_TIMEOUT_MS }); if (!res.headersSent) { res.statusCode = 504; return res.end("Gateway Timeout: Upstream Timeout"); } return; } emitRateLimitedError("error", "relay error", { "requestId": _0x09c26d, "method": req.method, "durationMs": durationMs, "error": String(err) }); if (!res.headersSent) { res.statusCode = 502; return res.end("Bad Gateway: Tunnel Failed"); } } finally { if (_0x4e7b1e) releaseSlot(); } } export { _0x1380ee as default }; function shouldForwardHeader(headerName) { if (FORWARD_HEADER_EXACT.has(headerName)) return true; for (const _0xa2f of FORWARD_HEADER_PREFIXES) { if (headerName.startsWith(_0xa2f)) return true; } return false; } function maybeLogSuccess(payload) { if (payload.status >= 400) { console.warn("relay non-2xx", payload); return; } if (payload.durationMs >= SUCCESS_LOG_MIN_DURATION_MS) { console.info("relay slow", payload); return; } if (SUCCESS_LOG_SAMPLE_RATE > 0 && Math.random() < SUCCESS_LOG_SAMPLE_RATE) { console.info("relay sample", payload); } } function emitRateLimitedError(kind, label, payload) { const _0x89462c = logState[kind] || logState.error; const _0x7393d = Date.now(); if (ERROR_LOG_MIN_INTERVAL_MS <= 0) { console.error(label, payload); return; } if (_0x7393d - _0x89462c.lastAt < ERROR_LOG_MIN_INTERVAL_MS) { _0x89462c.suppressed += 1; return; } const _0xc49gd = { ...payload }; if (_0x89462c.suppressed > 0) { _0xc49gd.suppressed = _0x89462c.suppressed; } _0x89462c.suppressed = 0; _0x89462c.lastAt = _0x7393d; console.error(label, _0xc49gd); } function applyDnsPreference() { if (UPSTREAM_DNS_ORDER !== "ipv4first" && UPSTREAM_DNS_ORDER !== "verbatim") return; try { setDefaultResultOrder(UPSTREAM_DNS_ORDER); } catch { } } function isUpstreamTimeoutError(err) { if (!err) return false; if (err?.name === "AbortError") return true; if (err?.code === "ABORT_ERR") return true; if (err?.message === "upstream_timeout") return true; if (err?.cause?.message === "upstream_timeout") return true; if (typeof err === "string" && err === "upstream_timeout") return true; return false; } function isAllowedRelayPath(pathname, publicPath) { return pathname === publicPath || pathname.startsWith(`${publicPath}/`); } function mapPublicPathToRelayPath(pathname, publicPath, relayPath) { if (pathname === publicPath) return relayPath; var _0xfa_0xfa1 = 8 + 8; const _0x7f_0x855 = pathname.slice(publicPath.length); _0xfa_0xfa1 = "nkohqp"; return `${relayPath}${_0x7f_0x855}`; } function normalizeRelayPath(rawPath) { if (!rawPath) return ""; const _0xgfd9ce = rawPath.startsWith("/") ? rawPath : `/${rawPath}`; if (_0xgfd9ce.length > 1 && _0xgfd9ce.endsWith("/")) return _0xgfd9ce.slice(0, -1); return _0xgfd9ce; } function normalizeIncomingPath(pathname) { if (!pathname) return "/"; let _0x4825c; let _0x1bdb = String(pathname).replace(new RegExp("\\/{2,}", "g"), "/"); _0x4825c = 6 + 4; if (!_0x1bdb.startsWith("/")) _0x1bdb = `/${_0x1bdb}`; if (_0x1bdb.length > 1 && _0x1bdb.endsWith("/")) _0x1bdb = _0x1bdb.slice(0, -1); return _0x1bdb; } function parsePositiveInt(rawValue, fallbackValue, minValue) { const _0x01fbdf = Number(rawValue); if (!Number.isFinite(_0x01fbdf)) return fallbackValue; if (_0x01fbdf < minValue) return fallbackValue; return Math.trunc(_0x01fbdf); } function parseNonNegativeInt(rawValue, fallbackValue) { const _0x83f0d = Number(rawValue); if (!Number.isFinite(_0x83f0d)) return fallbackValue; if (_0x83f0d < 0) return fallbackValue; return Math.trunc(_0x83f0d); } function clampNumber(value, minValue, maxValue) { if (!Number.isFinite(value)) return minValue; return Math.min(maxValue, Math.max(minValue, value)); } function toHeaderValue(value) { if (!value) return ""; return Array.isArray(value) ? value.join(", ") : String(value); } function tryAcquireSlot() { if (inFlight >= MAX_INFLIGHT) return false; inFlight += 1; return true; } function releaseSlot() { inFlight = Math.max(0, inFlight - 1); } function createGlobalLimiter(bytesPerSecond) { if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return null; var _0x48115a = 3 + 1; const _0x16d9a = Math.max(bytesPerSecond, 262144); _0x48115a = 8 + 2; let _0x31a9e = _0x16d9a; var _0x_0xaed = 3 + 8; let _0xb6b1b = Date.now(); _0x_0xaed = 1; const _0xee05a = []; let _0xb8f = null; function _0xe479g() { var _0x9cfe = 8 + 6; const _0xbb61g = Date.now(); _0x9cfe = 2; const _0x7dc3f = _0xbb61g - _0xb6b1b; if (_0x7dc3f <= 0) return; var _0x6bd7e = 5 + 5; const _0x2c_0xc0d = _0x7dc3f * bytesPerSecond / 1000; _0x6bd7e = 7; _0x31a9e = Math.min(_0x16d9a, _0x31a9e + _0x2c_0xc0d); _0xb6b1b = _0xbb61g; } function _0x9f38ag() { _0xe479g(); while (_0xee05a.length > 0 && _0x31a9e >= 1) { let _0x222f; const _0xa58g = _0xee05a[0]; _0x222f = 5 + 3; var _0xc6f8ed = 5 + 4; const _0x0359c = Math.min(_0xa58g.maxBytes, Math.max(1, Math.floor(_0x31a9e))); _0xc6f8ed = 7; if (_0x0359c < 1) break; _0x31a9e -= _0x0359c; _0xee05a.shift(); _0xa58g.resolve(_0x0359c); } } function _0x8ceed() { if (_0xb8f) return; _0xb8f = setTimeout(() => { _0xb8f = null; _0x9f38ag(); if (_0xee05a.length > 0) _0x8ceed(); }, 5); } return { acquire(maxBytes) { const _0xd3a = Math.max(1, Math.trunc(maxBytes || 1)); return new Promise(resolve => { _0xee05a.push({ "maxBytes": _0xd3a, "resolve": resolve }); _0x9f38ag(); if (_0xee05a.length > 0) _0x8ceed(); }); } }; } function createThrottleTransform(limiter) { if (!limiter) return new PassThrough(); return new Transform({ transform(chunk, _encoding, callback) { if (!chunk || chunk.length === 0) { callback(); return; } (async () => { let _0x4dcb = 0; while (_0x4dcb < chunk.length) { var _0x247ef = 7 + 7; const _0x897c3b = chunk.length - _0x4dcb; _0x247ef = 0; let _0xaf7cc; const _0x5662c = await limiter.acquire(_0x897c3b); _0xaf7cc = 0; const _0xg381fc = chunk.subarray(_0x4dcb, _0x4dcb + _0x5662c); _0x4dcb += _0x5662c; this.push(_0xg381fc); } })().then(() => callback()).catch(err => callback(err)); } }); }
+import { PassThrough, Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { setDefaultResultOrder } from "node:dns";
+
+export const config = {
+    api: { bodyParser: false },
+    supportsResponseStreaming: true,
+    maxDuration: 60,
+};
+
+const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
+const UPSTREAM_DNS_ORDER = (process.env.UPSTREAM_DNS_ORDER || "ipv4first").trim().toLowerCase();
+const PLATFORM_HEADER_PREFIX = `x-${String.fromCharCode(118, 101, 114, 99, 101, 108)}-`;
+const RELAY_PATH = normalizeRelayPath(process.env.RELAY_PATH || "");
+const PUBLIC_RELAY_PATH = normalizeRelayPath(process.env.PUBLIC_RELAY_PATH || "/api");
+const RELAY_KEY = (process.env.RELAY_KEY || "").trim();
+const UPSTREAM_TIMEOUT_MS = parsePositiveInt(process.env.UPSTREAM_TIMEOUT_MS, 25000, 1000);
+const MAX_INFLIGHT = parsePositiveInt(process.env.MAX_INFLIGHT, 128, 1);
+const MAX_UP_BPS = parseNonNegativeInt(process.env.MAX_UP_BPS, 2621440);
+const MAX_DOWN_BPS = parseNonNegativeInt(process.env.MAX_DOWN_BPS, 2621440);
+const SUCCESS_LOG_SAMPLE_RATE = clampNumber(parseFloat(process.env.SUCCESS_LOG_SAMPLE_RATE || "0"), 0, 1);
+const SUCCESS_LOG_MIN_DURATION_MS = parseNonNegativeInt(process.env.SUCCESS_LOG_MIN_DURATION_MS, 3000);
+const ERROR_LOG_MIN_INTERVAL_MS = parseNonNegativeInt(process.env.ERROR_LOG_MIN_INTERVAL_MS, 5000);
+const GLOBAL_UPLOAD_LIMITER = createGlobalLimiter(MAX_UP_BPS);
+const GLOBAL_DOWNLOAD_LIMITER = createGlobalLimiter(MAX_DOWN_BPS);
+
+applyDnsPreference();
+
+const ALLOWED_METHODS = new Set(["GET", "HEAD", "POST"]);
+const FORWARD_HEADER_EXACT = new Set([
+    "accept",
+    "accept-encoding",
+    "accept-language",
+    "cache-control",
+    "content-length",
+    "content-type",
+    "pragma",
+    "range",
+    "referer",
+    "user-agent",
+]);
+const FORWARD_HEADER_PREFIXES = ["sec-ch-", "sec-fetch-"];
+
+const STRIP_HEADERS = new Set([
+    "host",
+    "connection",
+    "proxy-connection",
+    "keep-alive",
+    "via",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+    "forwarded",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-forwarded-port",
+    "x-forwarded-for",
+    "x-real-ip",
+]);
+
+let inFlight = 0;
+const logState = {
+    timeout: { lastAt: 0, suppressed: 0 },
+    error: { lastAt: 0, suppressed: 0 },
+};
+
+export default async function handler(req, res) {
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const startedAt = Date.now();
+    let slotAcquired = false;
+
+    if (!TARGET_BASE) {
+        res.statusCode = 500;
+        return res.end("Misconfigured: TARGET_DOMAIN is not set");
+    }
+    if (!RELAY_PATH) {
+        res.statusCode = 500;
+        return res.end("Misconfigured: RELAY_PATH is not set");
+    }
+    if (RELAY_PATH === "/") {
+        res.statusCode = 500;
+        return res.end("Misconfigured: RELAY_PATH cannot be '/'");
+    }
+    if (!PUBLIC_RELAY_PATH) {
+        res.statusCode = 500;
+        return res.end("Misconfigured: PUBLIC_RELAY_PATH is not set");
+    }
+    if (PUBLIC_RELAY_PATH === "/") {
+        res.statusCode = 500;
+        return res.end("Misconfigured: PUBLIC_RELAY_PATH cannot be '/'");
+    }
+    if (RELAY_KEY && RELAY_KEY.length < 16) {
+        res.statusCode = 500;
+        return res.end("Misconfigured: RELAY_KEY is too short");
+    }
+
+    try {
+        const host = req.headers.host || "localhost";
+        const url = new URL(req.url || "/", `https://${host}`);
+
+        const normalizedPath = normalizeIncomingPath(url.pathname);
+
+        if (!isAllowedRelayPath(normalizedPath, PUBLIC_RELAY_PATH)) {
+            res.statusCode = 404;
+            return res.end("Not Found");
+        }
+        const upstreamPath = mapPublicPathToRelayPath(normalizedPath, PUBLIC_RELAY_PATH, RELAY_PATH);
+
+        if (!ALLOWED_METHODS.has(req.method)) {
+            res.statusCode = 405;
+            res.setHeader("allow", "GET, HEAD, POST");
+            return res.end("Method Not Allowed");
+        }
+
+        if (RELAY_KEY) {
+            const token = (req.headers["x-relay-key"] || "").toString();
+            if (token !== RELAY_KEY) {
+                res.statusCode = 403;
+                return res.end("Forbidden");
+            }
+        }
+        if (!tryAcquireSlot()) {
+            res.statusCode = 503;
+            res.setHeader("retry-after", "1");
+            return res.end("Server Busy: Too Many Inflight Requests");
+        }
+        slotAcquired = true;
+
+        const targetUrl = `${TARGET_BASE}${upstreamPath}${url.search || ""}`;
+
+        const headers = {};
+        const clientIp = toHeaderValue(req.headers["x-real-ip"] || req.headers["x-forwarded-for"]);
+        for (const key of Object.keys(req.headers)) {
+            const lower = key.toLowerCase();
+            const value = req.headers[key];
+            if (STRIP_HEADERS.has(lower)) continue;
+            if (lower.startsWith(PLATFORM_HEADER_PREFIX)) continue;
+            if (lower === "x-relay-key") continue;
+            if (!shouldForwardHeader(lower)) continue;
+            const normalizedValue = toHeaderValue(value);
+            if (normalizedValue) headers[lower] = normalizedValue;
+        }
+        if (clientIp) headers["x-forwarded-for"] = clientIp;
+
+        const hasBody = req.method !== "GET" && req.method !== "HEAD";
+        const abortCtrl = new AbortController();
+        let hitUpstreamTimeout = false;
+        const timeoutRef = setTimeout(() => {
+            hitUpstreamTimeout = true;
+            // Avoid throwing from timeout callback on runtimes that mishandle abort reasons.
+            try {
+                abortCtrl.abort();
+            } catch { }
+        }, UPSTREAM_TIMEOUT_MS);
+        let requestErrorHandler = null;
+        let uploadErrorHandler = null;
+        let uploadNodeStream = null;
+
+        try {
+            const fetchOpts = {
+                method: req.method,
+                headers,
+                redirect: "manual",
+                signal: abortCtrl.signal,
+            };
+
+            if (hasBody) {
+                uploadNodeStream = GLOBAL_UPLOAD_LIMITER
+                    ? req.pipe(createThrottleTransform(GLOBAL_UPLOAD_LIMITER))
+                    : req;
+
+                requestErrorHandler = (streamErr) => {
+                    if (isUpstreamTimeoutError(streamErr)) return;
+                    emitRateLimitedError("error", "relay upload request stream error", {
+                        requestId,
+                        method: req.method,
+                        error: String(streamErr),
+                    });
+                };
+                req.on("error", requestErrorHandler);
+
+                uploadErrorHandler = (streamErr) => {
+                    if (isUpstreamTimeoutError(streamErr)) return;
+                    emitRateLimitedError("error", "relay upload stream error", {
+                        requestId,
+                        method: req.method,
+                        error: String(streamErr),
+                    });
+                };
+                if (uploadNodeStream && uploadNodeStream !== req) {
+                    uploadNodeStream.on("error", uploadErrorHandler);
+                }
+
+                fetchOpts.body = Readable.toWeb(uploadNodeStream);
+                fetchOpts.duplex = "half";
+            }
+
+            const upstream = await fetch(targetUrl, fetchOpts);
+
+            res.statusCode = upstream.status;
+            for (const [headerName, headerValue] of upstream.headers) {
+                const k = headerName.toLowerCase();
+                if (k === "transfer-encoding" || k === "connection") continue;
+                try {
+                    res.setHeader(headerName, headerValue);
+                } catch { }
+            }
+
+            if (!upstream.body) {
+                res.end();
+            } else {
+                const upstreamNode = Readable.fromWeb(upstream.body);
+                const downloadStream = GLOBAL_DOWNLOAD_LIMITER
+                    ? upstreamNode.pipe(createThrottleTransform(GLOBAL_DOWNLOAD_LIMITER))
+                    : upstreamNode;
+                await pipeline(downloadStream, res);
+            }
+
+            const durationMs = Date.now() - startedAt;
+            maybeLogSuccess({
+                requestId,
+                path: normalizedPath,
+                upstreamPath,
+                rawPath: url.pathname,
+                method: req.method,
+                status: upstream.status,
+                durationMs,
+            });
+        } finally {
+            clearTimeout(timeoutRef);
+            if (requestErrorHandler) req.off("error", requestErrorHandler);
+            if (uploadNodeStream && uploadNodeStream !== req && uploadErrorHandler) {
+                uploadNodeStream.off("error", uploadErrorHandler);
+            }
+        }
+    } catch (err) {
+        const durationMs = Date.now() - startedAt;
+        if (hitUpstreamTimeout || isUpstreamTimeoutError(err)) {
+            emitRateLimitedError("timeout", "relay timeout", {
+                requestId,
+                method: req.method,
+                durationMs,
+                timeoutMs: UPSTREAM_TIMEOUT_MS,
+            });
+            if (!res.headersSent) {
+                res.statusCode = 504;
+                return res.end("Gateway Timeout: Upstream Timeout");
+            }
+            return;
+        }
+
+        emitRateLimitedError("error", "relay error", {
+            requestId,
+            method: req.method,
+            durationMs,
+            error: String(err),
+        });
+        if (!res.headersSent) {
+            res.statusCode = 502;
+            return res.end("Bad Gateway: Tunnel Failed");
+        }
+    } finally {
+        if (slotAcquired) releaseSlot();
+    }
+}
+
+function shouldForwardHeader(headerName) {
+    if (FORWARD_HEADER_EXACT.has(headerName)) return true;
+    for (const prefix of FORWARD_HEADER_PREFIXES) {
+        if (headerName.startsWith(prefix)) return true;
+    }
+    return false;
+}
+
+function maybeLogSuccess(payload) {
+    if (payload.status >= 400) {
+        console.warn("relay non-2xx", payload);
+        return;
+    }
+    if (payload.durationMs >= SUCCESS_LOG_MIN_DURATION_MS) {
+        console.info("relay slow", payload);
+        return;
+    }
+    if (SUCCESS_LOG_SAMPLE_RATE > 0 && Math.random() < SUCCESS_LOG_SAMPLE_RATE) {
+        console.info("relay sample", payload);
+    }
+}
+
+function emitRateLimitedError(kind, label, payload) {
+    const state = logState[kind] || logState.error;
+    const now = Date.now();
+    if (ERROR_LOG_MIN_INTERVAL_MS <= 0) {
+        console.error(label, payload);
+        return;
+    }
+    if (now - state.lastAt < ERROR_LOG_MIN_INTERVAL_MS) {
+        state.suppressed += 1;
+        return;
+    }
+    const out = { ...payload };
+    if (state.suppressed > 0) {
+        out.suppressed = state.suppressed;
+    }
+    state.suppressed = 0;
+    state.lastAt = now;
+    console.error(label, out);
+}
+
+function applyDnsPreference() {
+    if (UPSTREAM_DNS_ORDER !== "ipv4first" && UPSTREAM_DNS_ORDER !== "verbatim") return;
+    try {
+        setDefaultResultOrder(UPSTREAM_DNS_ORDER);
+    } catch { }
+}
+
+function isUpstreamTimeoutError(err) {
+    if (!err) return false;
+    if (err?.name === "AbortError") return true;
+    if (err?.code === "ABORT_ERR") return true;
+    if (err?.message === "upstream_timeout") return true;
+    if (err?.cause?.message === "upstream_timeout") return true;
+    if (typeof err === "string" && err === "upstream_timeout") return true;
+    return false;
+}
+
+function isAllowedRelayPath(pathname, publicPath) {
+    return pathname === publicPath || pathname.startsWith(`${publicPath}/`);
+}
+
+function mapPublicPathToRelayPath(pathname, publicPath, relayPath) {
+    if (pathname === publicPath) return relayPath;
+    const suffix = pathname.slice(publicPath.length);
+    return `${relayPath}${suffix}`;
+}
+
+function normalizeRelayPath(rawPath) {
+    if (!rawPath) return "";
+    const path = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
+    return path;
+}
+
+function normalizeIncomingPath(pathname) {
+    if (!pathname) return "/";
+    let normalized = String(pathname).replace(/\/{2,}/g, "/");
+    if (!normalized.startsWith("/")) normalized = `/${normalized}`;
+    if (normalized.length > 1 && normalized.endsWith("/")) normalized = normalized.slice(0, -1);
+    return normalized;
+}
+
+function parsePositiveInt(rawValue, fallbackValue, minValue) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return fallbackValue;
+    if (value < minValue) return fallbackValue;
+    return Math.trunc(value);
+}
+
+function parseNonNegativeInt(rawValue, fallbackValue) {
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return fallbackValue;
+    if (value < 0) return fallbackValue;
+    return Math.trunc(value);
+}
+
+function clampNumber(value, minValue, maxValue) {
+    if (!Number.isFinite(value)) return minValue;
+    return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function toHeaderValue(value) {
+    if (!value) return "";
+    return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+function tryAcquireSlot() {
+    if (inFlight >= MAX_INFLIGHT) return false;
+    inFlight += 1;
+    return true;
+}
+
+function releaseSlot() {
+    inFlight = Math.max(0, inFlight - 1);
+}
+
+function createGlobalLimiter(bytesPerSecond) {
+    if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return null;
+
+    const burstCap = Math.max(bytesPerSecond, 262144);
+    let tokens = burstCap;
+    let lastRefill = Date.now();
+    const queue = [];
+    let timer = null;
+
+    function refill() {
+        const now = Date.now();
+        const elapsedMs = now - lastRefill;
+        if (elapsedMs <= 0) return;
+        const refillAmount = (elapsedMs * bytesPerSecond) / 1000;
+        tokens = Math.min(burstCap, tokens + refillAmount);
+        lastRefill = now;
+    }
+
+    function tryDrain() {
+        refill();
+        while (queue.length > 0 && tokens >= 1) {
+            const item = queue[0];
+            const grant = Math.min(item.maxBytes, Math.max(1, Math.floor(tokens)));
+            if (grant < 1) break;
+            tokens -= grant;
+            queue.shift();
+            item.resolve(grant);
+        }
+    }
+
+    function schedule() {
+        if (timer) return;
+        timer = setTimeout(() => {
+            timer = null;
+            tryDrain();
+            if (queue.length > 0) schedule();
+        }, 5);
+    }
+
+    return {
+        acquire(maxBytes) {
+            const requested = Math.max(1, Math.trunc(maxBytes || 1));
+            return new Promise((resolve) => {
+                queue.push({ maxBytes: requested, resolve });
+                tryDrain();
+                if (queue.length > 0) schedule();
+            });
+        },
+    };
+}
+
+function createThrottleTransform(limiter) {
+    if (!limiter) return new PassThrough();
+
+    return new Transform({
+        transform(chunk, _encoding, callback) {
+            if (!chunk || chunk.length === 0) {
+                callback();
+                return;
+            }
+
+            (async () => {
+                let offset = 0;
+                while (offset < chunk.length) {
+                    const maxBytes = chunk.length - offset;
+                    const grant = await limiter.acquire(maxBytes);
+                    const piece = chunk.subarray(offset, offset + grant);
+                    offset += grant;
+                    this.push(piece);
+                }
+            })()
+                .then(() => callback())
+                .catch((err) => callback(err));
+        },
+    });
+}
